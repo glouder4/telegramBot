@@ -127,6 +127,36 @@
         var now = moment();
         moment.lang('ru');
         var IDsFromNumbers = []; var gotUsers = 0; let docs = []; let messages = []; 
+        var Downloaded = 0;
+        function DownloadInPath(Docs){
+        	setTimeout(function(){
+        		telegramApi.downloadDocument(Docs[Downloaded].doc, function(downloaded, total) {
+	                console.log('Loaded ' + downloaded + ' bytes. Total ' + total + ' bytes');
+	            },true).then(function(result) {            	            	
+	                $.ajax({
+	                  url: 'http://192.168.0.101:3000/makePath',
+	                  type: "POST",
+	                  data:JSON.stringify({user:Docs[Downloaded].ID,file:result.fileName}),
+	                  success: function(data) {
+	                    Downloaded++;
+	                    if(Downloaded == Docs.length){
+	                    	alert('Paths created');
+	                    }else{
+	                    	DownloadInPath(Docs);
+	                    }
+	                  },
+	                  error:function(err){
+	                    console.log(err);
+	                  }
+	                });
+
+	                 //result.bytes - file data
+	                 //result.fileName - file name
+	                 //result.type - file MIME-type
+	                 
+	            });
+        	},2000)    		
+        }
         function getMessages(id,countOfMessages = 25){
             telegramApi.getHistory({
             id: id,
@@ -134,22 +164,30 @@
             take: countOfMessages,
             skip: 0
             }).then(function(data) {   
-                gotUsers++;
-
+                gotUsers++;                
                 for(var i = 0 ; i < data.messages.length;i++){
                     let messageDate = data.messages[i].date;
                     let nowDate = parseInt((Date.now()).toString().split('').splice(0,10).join(''));
                     if(((nowDate - messageDate)/86400) < 3){
                         messages.push(data.messages[0]);
-                        if(data.messages[i].media != undefined) docs.push(data.messages[i].media.document);
+                        if(data.messages[i].media != undefined) docs.push({ID:id,doc:data.messages[i].media.document});
                     } 
-                }                  
+                }             
 
                 if(gotUsers == IDsFromNumbers.length){
-                    console.log(messages);
-                    console.log(docs);
+                	 $.ajax({
+	                  url: 'http://192.168.0.101:3000/accordance',
+	                  type: "POST",
+	                  data:JSON.stringify(IDsFromNumbers),
+	                  success: function(data) {
+	                   DownloadInPath(docs);
+	                  },
+	                  error:function(err){
+	                    console.log(err);
+	                  }
+	                });                    
                 }else{                
-                    getMessages(IDsFromNumbers[gotUsers]);
+                    getMessages(IDsFromNumbers[gotUsers].ID);
                 }
                 /*telegramApi.downloadDocument(doc, function(downloaded, total) {
                     console.log('Loaded ' + downloaded + ' bytes. Total ' + total + ' bytes');
@@ -181,14 +219,13 @@
                 offset_peer: {_: 'inputPeerEmpty'},
                 offset_date: 0,
                 limit: 60
-            }).then(function(dialogResult) {  
-                console.log(dialogResult.users);          
+            }).then(function(dialogResult) {           
                 for(var i = 0 ; i < data.length;i++){
                     for(var j = 0 ; j < dialogResult.users.length;j++){
-                        if(data[i] == dialogResult.users[j].phone) IDsFromNumbers.push(dialogResult.users[j].id);
+                        if(data[i] == dialogResult.users[j].phone) IDsFromNumbers.push({phone:data[i],ID:dialogResult.users[j].id});
                     }
                 }
-                if(IDsFromNumbers[0] != '') getMessages(IDsFromNumbers[0]);    
+                if(IDsFromNumbers[0] != '') getMessages(IDsFromNumbers[0].ID);    
             });
           },
           error:function(err){
